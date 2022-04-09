@@ -1,5 +1,6 @@
 const axios = require("axios");
 const express = require("express");
+const fs = require('fs').promises;
 const { Decimal } = require("@cosmjs/math");
 const { QueryClient, setupAuthExtension } = require("@cosmjs/stargate");
 const { Tendermint34Client } = require("@cosmjs/tendermint-rpc");
@@ -8,6 +9,8 @@ const {
   DelayedVestingAccount,
   PeriodicVestingAccount,
 } = require("cosmjs-types/cosmos/vesting/v1beta1/vesting");
+const cliProgress = require('cli-progress');
+const bar1 = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
 
 require("dotenv").config();
 
@@ -17,6 +20,7 @@ const interval = process.env.INTERVAL || 7200000;
 const vestingAccounts = process.env.VESTING_ACCOUNTS
   ? process.env.VESTING_ACCOUNTS.split(",")
   : [];
+// console.log(vestingAccounts);
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -36,6 +40,13 @@ let totalSupply,
   bondedRatio,
   totalStaked;
 
+async function loadSupply() {
+  circulatingSupply = await fs.readFile('circulating_supply.txt', (err, supply) => {
+    return supply;
+    // return Decimal.fromAtomics(supply, 6).toString()
+  })
+}
+
 // Gets supply info from chain
 async function updateData() {
   try {
@@ -44,6 +55,8 @@ async function updateData() {
       process.env.RPC_ENDPOINT
     );
 
+    await loadSupply();
+    console.log("Loaded circulating supply: " + circulatingSupply);
     console.log("Updating supply info", new Date());
 
     // Get total supply
@@ -65,9 +78,15 @@ async function updateData() {
       url: `${process.env.REST_API_ENDPOINT}/cosmos/staking/v1beta1/pool`,
     });
 
+    // Get inflation
+    inflation = await axios({
+      method: "get",
+      url: `${process.env.REST_API_ENDPOINT}/cosmos/mint/v1beta1/inflation`,
+    });
+
     totalStaked = stakingInfo.data.pool.bonded_tokens;
     bondedRatio = totalStaked / totalSupply.data.amount.amount;
-    apr = 35 / bondedRatio;
+    apr = inflation.data.inflation / bondedRatio;
 
     console.log("APR: ", apr);
     console.log("Total Staked: ", totalStaked);
@@ -87,8 +106,14 @@ async function updateData() {
     }
 
     // Iterate through vesting accounts and subtract vesting balance from total
+    // circulatingSupply = fs.readFile('circulating_supply.txt', (err, supply) => {
+      // console.log("Loaded supply: " + supply);
+      // return supply;
+    // })
+    bar1.start(vestingAccounts.length, 0);
     for (let i = 0; i < vestingAccounts.length; i++) {
       const account = await client.auth.account(vestingAccounts[i]);
+      // console.log(account, i)
       let accountInfo = PeriodicVestingAccount.decode(account.value);
       let originalVesting =
         accountInfo.baseVestingAccount.originalVesting[0].amount;
@@ -96,11 +121,23 @@ async function updateData() {
         accountInfo.baseVestingAccount.delegatedFree.length > 0
           ? accountInfo.baseVestingAccount.delegatedFree[0].amount
           : 0;
-
+      // console.log(originalVesting, delegatedFree)
       tmpCirculatingSupply -= originalVesting - delegatedFree;
+      bar1.update(i);
     }
+    bar1.update(vestingAccounts.length);
+    bar1.stop();
     circulatingSupply = tmpCirculatingSupply;
+    // circulatingSupply = await loadSupply();
     console.log("Circulating supply: ", circulatingSupply);
+    fs.writeFile('circulating_supply.txt', circulatingSupply.toString(), function (err) {
+    // fs.writeFile('circulating_supply.txt', Decimal.fromAtomics(circulatingSupply, 6).toString(), function (err) {
+      if (err) return console.log(err);
+      // console.log('Circulating supply saved');
+    });
+    console.log('Circulating supply saved');
+    // loadSupply();
+    // circulatingSupply = await loadSupply();
   } catch (e) {
     console.error(e);
   }
@@ -116,7 +153,8 @@ app.get("/", async (req, res) => {
   res.json({
     apr,
     bondedRatio,
-    circulatingSupply: Decimal.fromAtomics(circulatingSupply, 6).toString(),
+    circulatingSupply: Decimal.fromAtomics(circulatingSupply.toString(), 6).toString(),
+    // circulatingSupply: circulatingSupply.toString(),
     communityPool: Decimal.fromAtomics(
       communityPoolMainDenomTotal.split(".")[0],
       6
@@ -139,7 +177,10 @@ app.get("/bonded-ratio", async (req, res) => {
 });
 
 app.get("/circulating-supply", async (req, res) => {
-  res.send(Decimal.fromAtomics(circulatingSupply, 6).toString());
+  // res.send(Decimal.fromAtomics(circulatingSupply, 6).toString());
+  // res.send(circulatingSupply.toString());
+  // res.send(Number(circulatingSupply.toString()).toFixed(6));
+  res.send(Decimal.fromAtomics(circulatingSupply.toString(), 6).toString());
 });
 
 app.get("/total-staked", async (req, res) => {
