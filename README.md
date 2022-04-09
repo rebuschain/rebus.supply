@@ -31,7 +31,7 @@ The base route `/` returns all info in JSON:
 cd $HOME
 git clone https://github.com/NodesGuru/supply-info-api.git
 cd ~/supply-info-api
-cp .env.example .env
+cp .env.example .env # you can find working .env for umee network in the umee folder
 cd umee
 wget https://github.com/umee-network/mainnet/raw/main/genesis.json
 cat genesis.json | jq -r '.app_state.auth.accounts[] | select(."@type" | contains ("vesting")) | .base_vesting_account.base_account.address' > vesting_accounts_unformatted
