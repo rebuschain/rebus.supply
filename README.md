@@ -26,7 +26,7 @@ The base route `/` returns all info in JSON:
 ### How to use?
 > ⚠️ This example for [Umee](https://github.com/umee-network) network:
 
-#### Parse the vesting accounts:
+#### Parse vesting accounts:
 ```bash
 cd $HOME
 git clone https://github.com/NodesGuru/supply-info-api.git
