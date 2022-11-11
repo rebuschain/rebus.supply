@@ -104,7 +104,8 @@ async function updateData() {
     
     totalStaked = stakingInfo.data.pool.bonded_tokens;
     bondedRatio = totalStaked / totalSupply.data.amount.amount;
-    apr = inflation.data.inflation / bondedRatio * block_reward_staking_percent;
+    // apr in %
+    apr = parseInt((inflation.data.inflation / bondedRatio * block_reward_staking_percent * 100), 10);
 
     console.log("APR: ", apr);
     console.log("Total Staked: ", totalStaked);
