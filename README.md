@@ -2,6 +2,8 @@
 
 An API for basic info about the any cosmos token supply.
 
+This project was started from https://github.com/NodesGuru/supply-info-api
+
 The base route `/` returns all info in JSON:
 
 ```json
